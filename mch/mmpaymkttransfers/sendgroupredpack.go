@@ -9,7 +9,8 @@ import (
 	"github.com/chanxuehong/wechat/mch"
 )
 
-// 查询代金券批次信息.
-func QueryCouponStock(pxy *mch.Proxy, req map[string]string) (resp map[string]string, err error) {
-	return pxy.PostXML("https://api.mch.weixin.qq.com/mmpaymkttransfers/query_coupon_stock", req)
+// 发放裂变红包.
+//  NOTE: 请求需要双向证书
+func SendGroupRedPack(pxy *mch.Proxy, req map[string]string) (resp map[string]string, err error) {
+	return pxy.PostXML("https://api.mch.weixin.qq.com/mmpaymkttransfers/sendgroupredpack", req)
 }
