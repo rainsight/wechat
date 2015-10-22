@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/chanxuehong/wechat/mp"
 )
 
@@ -99,6 +100,7 @@ func (srv *DefaultTicketServer) TicketRefresh() (ticket string, err error) {
 func (srv *DefaultTicketServer) ticketDaemon(tickDuration time.Duration) {
 NEW_TICK_DURATION:
 	ticker := time.NewTicker(tickDuration)
+	log.WithField("duration", tickDuration.String()).Infoln("Wechat ticket server beginning")
 
 	for {
 		select {
@@ -133,6 +135,11 @@ type ticketInfo struct {
 func (srv *DefaultTicketServer) getTicket() (ticket ticketInfo, cached bool, err error) {
 	srv.ticketGet.Lock()
 	defer srv.ticketGet.Unlock()
+	defer func() {
+		if err != nil {
+			log.WithField("error", err).Errorln("Get wechat ticket failed")
+		}
+	}()
 
 	timeNowUnix := time.Now().Unix()
 
@@ -203,5 +210,6 @@ func (srv *DefaultTicketServer) getTicket() (ticket ticketInfo, cached bool, err
 	srv.ticketCache.Unlock()
 
 	ticket = result.ticketInfo
+	log.WithField("ticket", ticket).Infoln("New wechat ticket get")
 	return
 }

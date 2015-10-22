@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 // access_token 中控服务器接口, see access_token_server.png
@@ -108,6 +110,7 @@ func (srv *DefaultAccessTokenServer) TokenRefresh() (token string, err error) {
 func (srv *DefaultAccessTokenServer) tokenDaemon(tickDuration time.Duration) {
 NEW_TICK_DURATION:
 	ticker := time.NewTicker(tickDuration)
+	log.WithField("duration", tickDuration.String()).Infoln("Wechat token server beginning")
 
 	for {
 		select {
@@ -142,6 +145,11 @@ type accessTokenInfo struct {
 func (srv *DefaultAccessTokenServer) getToken() (token accessTokenInfo, cached bool, err error) {
 	srv.tokenGet.Lock()
 	defer srv.tokenGet.Unlock()
+	defer func() {
+		if err != nil {
+			log.WithField("error", err).Errorln("Refresh Token failed!")
+		}
+	}()
 
 	timeNowUnix := time.Now().Unix()
 
@@ -234,5 +242,6 @@ func (srv *DefaultAccessTokenServer) getToken() (token accessTokenInfo, cached b
 	srv.tokenCache.Unlock()
 
 	token = result.accessTokenInfo
+	log.WithField("token", token).Infoln("New wechat token get")
 	return
 }
