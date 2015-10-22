@@ -68,7 +68,13 @@ func NewDefaultTicketServer(clt *mp.Client) (srv *DefaultTicketServer) {
 		resetTickerChan: make(chan time.Duration),
 	}
 
-	go srv.ticketDaemon(time.Hour * 24) // 启动 tokenDaemon
+	go func() {
+		tickDuration, err := srv.intervalRequestTicket()
+		if err != nil {
+			tickDuration = time.Hour * 24
+		}
+		srv.ticketDaemon(tickDuration) // 启动 tokenDaemon
+	}()
 	return
 }
 
@@ -98,31 +104,36 @@ func (srv *DefaultTicketServer) TicketRefresh() (ticket string, err error) {
 }
 
 func (srv *DefaultTicketServer) ticketDaemon(tickDuration time.Duration) {
-NEW_TICK_DURATION:
-	ticker := time.NewTicker(tickDuration)
-	log.WithField("duration", tickDuration.String()).Infoln("Wechat ticket server beginning")
-
 	for {
-		select {
-		case tickDuration = <-srv.resetTickerChan:
-			ticker.Stop()
-			goto NEW_TICK_DURATION
+		ticker := time.NewTicker(tickDuration)
+		log.WithField("duration", tickDuration.String()).Infoln("Wechat ticket server beginning")
 
-		case <-ticker.C:
-			ticketInfo, cached, err := srv.getTicket()
-			if err != nil {
-				break
-			}
-			if !cached {
-				newTickDuration := time.Duration(ticketInfo.ExpiresIn) * time.Second
-				if tickDuration != newTickDuration {
+	OuterLoop:
+		for {
+			select {
+			case tickDuration = <-srv.resetTickerChan:
+				break OuterLoop
+
+			case <-ticker.C:
+				newTickDuration, _ := srv.intervalRequestTicket()
+				if newTickDuration != tickDuration && newTickDuration != 0 {
 					tickDuration = newTickDuration
-					ticker.Stop()
-					goto NEW_TICK_DURATION
+					break OuterLoop
 				}
 			}
 		}
 	}
+}
+
+func (srv *DefaultTicketServer) intervalRequestTicket() (newTickDuration time.Duration, err error) {
+	ticketInfo, cached, err := srv.getTicket()
+	if err != nil {
+		return
+	}
+	if !cached {
+		newTickDuration = time.Duration(ticketInfo.ExpiresIn) * time.Second
+	}
+	return
 }
 
 type ticketInfo struct {

@@ -78,7 +78,13 @@ func NewDefaultAccessTokenServer(appId, appSecret string, clt *http.Client) (srv
 		resetTickerChan: make(chan time.Duration),
 	}
 
-	go srv.tokenDaemon(time.Hour * 24) // 启动 tokenDaemon
+	go func() {
+		tickDuration, err := srv.intervalRequestToken()
+		if err != nil {
+			tickDuration = time.Hour * 24
+		}
+		srv.tokenDaemon(tickDuration) // 启动 tokenDaemon
+	}()
 	return
 }
 
@@ -108,31 +114,36 @@ func (srv *DefaultAccessTokenServer) TokenRefresh() (token string, err error) {
 }
 
 func (srv *DefaultAccessTokenServer) tokenDaemon(tickDuration time.Duration) {
-NEW_TICK_DURATION:
-	ticker := time.NewTicker(tickDuration)
-	log.WithField("duration", tickDuration.String()).Infoln("Wechat token server beginning")
-
 	for {
-		select {
-		case tickDuration = <-srv.resetTickerChan:
-			ticker.Stop()
-			goto NEW_TICK_DURATION
+		ticker := time.NewTicker(tickDuration)
+		log.WithField("duration", tickDuration.String()).Infoln("Wechat token server beginning")
 
-		case <-ticker.C:
-			accessTokenInfo, cached, err := srv.getToken()
-			if err != nil {
-				break
-			}
-			if !cached {
-				newTickDuration := time.Duration(accessTokenInfo.ExpiresIn) * time.Second
-				if tickDuration != newTickDuration {
+	OuterLoop:
+		for {
+			select {
+			case tickDuration = <-srv.resetTickerChan:
+				break OuterLoop
+
+			case <-ticker.C:
+				newTickDuration, _ := srv.intervalRequestToken()
+				if newTickDuration != tickDuration && newTickDuration != 0 {
 					tickDuration = newTickDuration
-					ticker.Stop()
-					goto NEW_TICK_DURATION
+					break OuterLoop
 				}
 			}
 		}
 	}
+}
+
+func (srv *DefaultAccessTokenServer) intervalRequestToken() (newTickDuration time.Duration, err error) {
+	accessTokenInfo, cached, err := srv.getToken()
+	if err != nil {
+		return
+	}
+	if !cached {
+		newTickDuration = time.Duration(accessTokenInfo.ExpiresIn) * time.Second
+	}
+	return
 }
 
 type accessTokenInfo struct {
